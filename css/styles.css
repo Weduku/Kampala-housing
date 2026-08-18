@@ -66,6 +66,13 @@ html, body {
 .map-btn.small { width: 38px; height: 38px; }
 .map-btn.small svg { width: 18px; height: 18px; }
 
+/* ---------- Admin-only controls — hidden unless ?admin=1 was used once
+   on this device (see js/app.js isAdminMode()). Public visitors never see
+   these; not real security, just keeps them off the shared/testing build. ---------- */
+.admin-only { display: none !important; }
+body.admin-mode .demo-tools.admin-only { display: flex !important; }
+body.admin-mode #btn-manage.admin-only { display: flex !important; }
+
 /* ---------- App name badge ---------- */
 .app-badge {
   position: absolute;

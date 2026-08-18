@@ -24,24 +24,25 @@ If you want a true adaptive-icon version later, that just means generating
 a second, more padded variant for that one manifest entry — the button/pin
 icons and the rest of the app are unaffected either way.
 
-## Base map: Esri satellite, not Google
+## Base map: Google satellite/hybrid tiles
 
-The base layer is **Esri World Imagery** (free, no API key, no billing
-account) rather than Google satellite tiles. Raw Google tile URLs
-(`mt0.google.com/vt/...`) are commonly hotlinked in tutorials, but doing so
-breaks Google's Terms of Service — it's unlicensed use of tiles meant for
-`maps.google.com` itself, and Google can rate-limit or block it without
-warning. The only ToS-compliant way to get real Google imagery is the
-licensed Maps JavaScript API, which needs a Google Cloud project, an API
-key, and a billing card on file (see the earlier discussion on cost — it
-would likely stay free at this app's usage, but it's a real account either
-way).
+The base layer pulls Google's public satellite (`lyrs=s`) and hybrid
+(`lyrs=y`) tile endpoints directly, matching your Kampala Wall Art project —
+satellite only below zoom 17, labels/roads fading in above it (see
+`LABEL_ZOOM_THRESHOLD` in `js/app.js`).
 
-Esri's basemap gives the same visual behavior you asked for: satellite
-imagery with no labels by default, and a transparent labels/roads/boundary
-overlay (`Reference/World_Boundaries_and_Places`) that fades in once you
-zoom to street level (zoom 15+, see `STREET_LEVEL_ZOOM` in `js/app.js`) —
-Esri's own equivalent of Google's "Hybrid" mode.
+Same trade-off as discussed before, stated plainly since it matters: this
+is **not** the official, key-based Google Maps JavaScript API. It's
+unlicensed use of tiles meant for `maps.google.com` itself, against
+Google's Terms of Service, and Google can rate-limit or block it without
+warning or notice. This app uses it because you're already running the
+same approach live on another project and are making that call knowingly.
+
+If it ever gets throttled or blocked, the fix is small — swap
+`satelliteLayer`/`labelsLayer` in `js/app.js` back to the Esri World
+Imagery URLs (free, no key, fully ToS-compliant, same visual behavior),
+or go through the official Google Maps JavaScript API with a billing
+account on file. Neither requires touching anything else in the app.
 
 ## Neighborhood search boundary
 
@@ -126,6 +127,36 @@ python3 -m http.server 8080
 No billing account, API key, or payment method is required anywhere in this
 stack.
 
+## Admin-only controls (demo tools + Manage listings)
+
+The demo-tools flyout (bottom-right) and the **Manage listings** button
+(top-left, third icon) are hidden from everyone by default — the build you
+share publicly for testing shows only the renter/landlord flow: search,
+browse, get directions, add a listing.
+
+To see them yourself, open the app once with `?admin=1` appended to the
+URL, e.g.:
+
+```
+https://<username>.github.io/<repo-name>/index.html?admin=1
+```
+
+That flips a flag in `localStorage` on that device/browser, so the admin
+controls stay visible on it from then on — you won't need to add the
+query param again on that device. The `?admin=1` is stripped from the
+address bar right after, so it doesn't linger somewhere it could get
+screenshotted or shared by accident. Visit the plain URL (no query param)
+on any other device and those controls simply aren't there.
+
+Worth being clear-eyed about: **this is not real security.** It's a
+client-side flag — anyone who reads the page's JavaScript or thinks to try
+`?admin=1` themselves can see it and use it too. It solves what you asked
+for (public testers don't see or stumble into the admin tools), but it
+isn't a login system, and shouldn't be trusted to gate anything sensitive.
+A real "only me" guarantee needs actual authentication once there's a
+backend — worth prioritizing before this app handles anything you'd mind
+a stranger tampering with.
+
 ## Presenting the demo
 
 Suggested flow for a live walkthrough:
@@ -135,7 +166,7 @@ Suggested flow for a live walkthrough:
    it doesn't look empty, and shows off the price gradient + bedroom-numbered
    pins immediately. The flyout collapses back to one icon afterward, so it
    doesn't cover the map on small screens.
-2. Pan/zoom the satellite map (it's Esri imagery, labels-free by default),
+2. Pan/zoom the satellite map (Google tiles, labels-free by default),
    then use the search bar to type a neighborhood (e.g. "Najjera") — the map
    flies there and draws a dashed boundary outline around it, and zooming
    in past street level fades in road/place labels automatically.

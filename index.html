@@ -21,7 +21,7 @@
 <div class="control-stack">
   <button class="map-btn" id="btn-locate" title="Center on my location" aria-label="Center on my location"></button>
   <button class="map-btn" id="btn-add" title="Add a listing" aria-label="Add a listing"></button>
-  <button class="map-btn" id="btn-manage" title="Manage listings" aria-label="Manage listings"></button>
+  <button class="map-btn admin-only" id="btn-manage" title="Manage listings" aria-label="Manage listings"></button>
 </div>
 
 <!-- Neighborhood search -->
@@ -45,7 +45,7 @@
 
 <!-- Prototype demo tools — collapsed to a single icon so it doesn't cover
      the map on small screens; tap to reveal three icon actions. -->
-<div class="demo-tools" id="demo-tools">
+<div class="demo-tools admin-only" id="demo-tools">
   <div class="demo-flyout" id="demo-flyout">
     <button class="map-btn small" id="btn-seed" title="Load 6 sample listings" aria-label="Load 6 sample listings"></button>
     <button class="map-btn small" id="btn-simulate" title="Simulate weekly check-in" aria-label="Simulate weekly check-in"></button>

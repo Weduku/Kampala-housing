@@ -62,6 +62,37 @@ const DB = {
 const DEVICE_ID = DB.deviceId();
 
 // ---------------------------------------------------------------------------
+// Admin mode — hides the demo tools and "manage listings" button from the
+// general public. Visit the app once with ?admin=1 on the URL (e.g.
+// https://your-site/index.html?admin=1) on your own device/browser; that
+// flips a localStorage flag so those controls stay visible on that device
+// from then on, without needing the query param again. Anyone who opens
+// the plain URL never sees them.
+//
+// Worth being honest about: this is NOT real security — it's a client-side
+// flag, visible to anyone who reads the JS or thinks to try the URL
+// parameter. It stops the controls from appearing in front of everyday
+// visitors, which is what you asked for, but it isn't a login system and
+// shouldn't gate anything sensitive. A real "only me" guarantee needs
+// actual auth once there's a backend.
+const ADMIN_STORAGE_KEY = "kampala_housing_admin_v1";
+function isAdminMode() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("admin") === "1" || params.get("admin") === "true") {
+    localStorage.setItem(ADMIN_STORAGE_KEY, "1");
+    // Strip it from the URL so it doesn't linger in the address bar/history
+    // if this link ever gets shared or screenshotted by accident.
+    params.delete("admin");
+    const rest = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + (rest ? "?" + rest : ""));
+  }
+  return localStorage.getItem(ADMIN_STORAGE_KEY) === "1";
+}
+if (isAdminMode()) {
+  document.body.classList.add("admin-mode");
+}
+
+// ---------------------------------------------------------------------------
 // Neighborhoods seed list (Kampala area) — used for local search-and-zoom.
 // Approximate coordinates for demo purposes.
 // ---------------------------------------------------------------------------
@@ -90,34 +121,29 @@ const NEIGHBORHOODS = [
 const map = L.map("map", { zoomControl: false }).setView([0.3476, 32.5825], 12);
 L.control.zoom({ position: "bottomright" }).addTo(map);
 
-// Satellite base — Esri World Imagery. Free, no API key, no billing account,
-// widely used as an open Leaflet basemap (unlike Google's tile server, which
-// requires the licensed Maps JavaScript API — see README for why we didn't
-// hotlink Google's unofficial tile URLs).
-const satelliteLayer = L.tileLayer(
-  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-  {
-    maxZoom: 19,
-    attribution:
-      "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
-  }
-).addTo(map);
+// Satellite/hybrid base — Google's public tile endpoint, matching your
+// Kampala Wall Art project. Note this is the same trade-off flagged before:
+// it's not the official, key-based Maps JavaScript API, so it's unlicensed
+// use of tiles meant for maps.google.com — it can be rate-limited or
+// blocked by Google without notice. Using it here since you've already
+// run it live on another project and are making that call knowingly; if it
+// ever gets throttled, the Esri World Imagery version from before is a
+// drop-in fallback (same L.tileLayer shape, no other code changes needed).
+const LABEL_ZOOM_THRESHOLD = 17; // roughly a ~150–300m-wide view, adjust to taste
+const satelliteLayer = L.tileLayer("https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", {
+  attribution: "Map data &copy; Google",
+  subdomains: ["mt0", "mt1", "mt2", "mt3"],
+  maxZoom: 20,
+}).addTo(map);
 
-// Labels/roads/boundaries overlay — transparent background, meant to sit on
-// top of imagery (Esri's equivalent of Google's "Hybrid" mode). We only show
-// it once the user has zoomed in to street level, so the default view stays
-// clean satellite-only, matching the behavior you described.
-const labelsLayer = L.tileLayer(
-  "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-  {
-    maxZoom: 19,
-    attribution: "Esri",
-  }
-);
+const labelsLayer = L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+  attribution: "Map data &copy; Google",
+  subdomains: ["mt0", "mt1", "mt2", "mt3"],
+  maxZoom: 20,
+});
 
-const STREET_LEVEL_ZOOM = 15;
 function updateLabelLayer() {
-  const shouldShow = map.getZoom() >= STREET_LEVEL_ZOOM;
+  const shouldShow = map.getZoom() >= LABEL_ZOOM_THRESHOLD;
   const isShown = map.hasLayer(labelsLayer);
   if (shouldShow && !isShown) labelsLayer.addTo(map);
   if (!shouldShow && isShown) map.removeLayer(labelsLayer);
