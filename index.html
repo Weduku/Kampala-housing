@@ -17,10 +17,11 @@
 
 <div class="app-badge" id="app-badge">Kampala Housing</div>
 
-<!-- Top-left: compass (recenter) then add-location, stacked -->
+<!-- Top-left: compass (recenter), add-location, manage-listings, stacked -->
 <div class="control-stack">
   <button class="map-btn" id="btn-locate" title="Center on my location" aria-label="Center on my location"></button>
   <button class="map-btn" id="btn-add" title="Add a listing" aria-label="Add a listing"></button>
+  <button class="map-btn" id="btn-manage" title="Manage listings" aria-label="Manage listings"></button>
 </div>
 
 <!-- Neighborhood search -->
@@ -42,13 +43,15 @@
   <div class="badge-note">Number on each pin = bedrooms</div>
 </div>
 
-<!-- Demo / prototype tools (clearly labeled — not part of the real product UI) -->
-<div class="demo-panel" id="demo-panel">
-  <h4>Prototype demo tools</h4>
-  <p>Simulates the weekly WhatsApp/Push check-in without waiting a week, for presenting.</p>
-  <button id="btn-seed">Load 6 sample listings</button>
-  <button id="btn-simulate" class="ghost">Simulate weekly check-in</button>
-  <button id="btn-reset" class="ghost">Reset all data</button>
+<!-- Prototype demo tools — collapsed to a single icon so it doesn't cover
+     the map on small screens; tap to reveal three icon actions. -->
+<div class="demo-tools" id="demo-tools">
+  <div class="demo-flyout" id="demo-flyout">
+    <button class="map-btn small" id="btn-seed" title="Load 6 sample listings" aria-label="Load 6 sample listings"></button>
+    <button class="map-btn small" id="btn-simulate" title="Simulate weekly check-in" aria-label="Simulate weekly check-in"></button>
+    <button class="map-btn small" id="btn-reset" title="Reset all data" aria-label="Reset all data"></button>
+  </div>
+  <button class="map-btn" id="btn-demo-toggle" title="Prototype demo tools" aria-label="Prototype demo tools"></button>
 </div>
 
 <!-- Add listing modal -->
@@ -115,6 +118,18 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Manage listings (admin) modal — reads/removes from this browser's data -->
+<div class="modal-backdrop" id="admin-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Manage listings</h3>
+      <button class="map-btn small" id="btn-close-admin" aria-label="Close"></button>
+    </div>
+    <p class="admin-summary" id="admin-summary"></p>
+    <div class="admin-list" id="admin-list"></div>
+  </div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="js/icons.js"></script>

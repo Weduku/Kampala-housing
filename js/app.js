@@ -90,12 +90,43 @@ const NEIGHBORHOODS = [
 const map = L.map("map", { zoomControl: false }).setView([0.3476, 32.5825], 12);
 L.control.zoom({ position: "bottomright" }).addTo(map);
 
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19,
-  attribution: "&copy; OpenStreetMap contributors",
-}).addTo(map);
+// Satellite base — Esri World Imagery. Free, no API key, no billing account,
+// widely used as an open Leaflet basemap (unlike Google's tile server, which
+// requires the licensed Maps JavaScript API — see README for why we didn't
+// hotlink Google's unofficial tile URLs).
+const satelliteLayer = L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  {
+    maxZoom: 19,
+    attribution:
+      "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+  }
+).addTo(map);
+
+// Labels/roads/boundaries overlay — transparent background, meant to sit on
+// top of imagery (Esri's equivalent of Google's "Hybrid" mode). We only show
+// it once the user has zoomed in to street level, so the default view stays
+// clean satellite-only, matching the behavior you described.
+const labelsLayer = L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+  {
+    maxZoom: 19,
+    attribution: "Esri",
+  }
+);
+
+const STREET_LEVEL_ZOOM = 15;
+function updateLabelLayer() {
+  const shouldShow = map.getZoom() >= STREET_LEVEL_ZOOM;
+  const isShown = map.hasLayer(labelsLayer);
+  if (shouldShow && !isShown) labelsLayer.addTo(map);
+  if (!shouldShow && isShown) map.removeLayer(labelsLayer);
+}
+map.on("zoomend", updateLabelLayer);
+updateLabelLayer();
 
 const markersLayer = L.layerGroup().addTo(map);
+const boundaryLayer = L.layerGroup().addTo(map); // dashed neighborhood outline, one at a time
 let meMarker = null;
 let tempPinMarker = null; // draggable pin shown while the add-listing modal is open
 
@@ -104,9 +135,15 @@ let tempPinMarker = null; // draggable pin shown while the add-listing modal is 
 // ---------------------------------------------------------------------------
 document.getElementById("btn-locate").innerHTML = ICONS.compass;
 document.getElementById("btn-add").innerHTML = ICONS.addLocation;
+document.getElementById("btn-manage").innerHTML = ICONS.list;
 document.getElementById("btn-close-modal").innerHTML = ICONS.close;
+document.getElementById("btn-close-admin").innerHTML = ICONS.close;
 document.getElementById("search-icon").innerHTML = ICONS.search;
 document.getElementById("camera-icon").innerHTML = ICONS.camera;
+document.getElementById("btn-demo-toggle").innerHTML = ICONS.flask;
+document.getElementById("btn-seed").innerHTML = ICONS.layers;
+document.getElementById("btn-simulate").innerHTML = ICONS.bell;
+document.getElementById("btn-reset").innerHTML = ICONS.trash;
 
 // ---------------------------------------------------------------------------
 // Placeholder photos (no external image hosting needed — zero-cost, no
@@ -319,12 +356,12 @@ async function runSearch(q) {
   const localMatches = NEIGHBORHOODS.filter((n) => n.name.toLowerCase().includes(qLower));
 
   renderSearchResults(
-    localMatches.map((n) => ({ label: n.name, sub: "Neighborhood", lat: n.lat, lng: n.lng }))
+    localMatches.map((n) => ({ label: n.name, sub: "Neighborhood", lat: n.lat, lng: n.lng, geojson: null, bbox: null }))
   );
 
   if (localMatches.length === 0) {
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=ug&limit=5&q=${encodeURIComponent(q)}`;
+      const url = `https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&countrycodes=ug&limit=5&q=${encodeURIComponent(q)}`;
       const res = await fetch(url);
       const data = await res.json();
       renderSearchResults(
@@ -333,6 +370,13 @@ async function runSearch(q) {
           sub: d.display_name,
           lat: parseFloat(d.lat),
           lng: parseFloat(d.lon),
+          geojson: d.geojson && d.geojson.type !== "Point" ? d.geojson : null,
+          bbox: d.boundingbox
+            ? [
+                [parseFloat(d.boundingbox[0]), parseFloat(d.boundingbox[2])],
+                [parseFloat(d.boundingbox[1]), parseFloat(d.boundingbox[3])],
+              ]
+            : null,
         }))
       );
     } catch (e) {
@@ -354,12 +398,70 @@ function renderSearchResults(items) {
     .join("");
   searchResults.classList.add("show");
   Array.from(searchResults.querySelectorAll("button")).forEach((btn, i) => {
-    btn.addEventListener("click", () => {
-      map.flyTo([items[i].lat, items[i].lng], 15, { duration: 0.8 });
-      searchResults.classList.remove("show");
-      searchInput.value = items[i].label;
-    });
+    btn.addEventListener("click", () => selectSearchResult(items[i]));
   });
+}
+
+// ---------------------------------------------------------------------------
+// Neighborhood boundary — dashed outline shown around the searched area,
+// same idea as Google Maps' search highlight. Real polygon when OSM has
+// one; a soft dashed circle fallback otherwise (also what Google itself
+// falls back to for places without precise boundary data).
+// ---------------------------------------------------------------------------
+function clearBoundary() {
+  boundaryLayer.clearLayers();
+}
+
+function drawBoundaryFromGeoJSON(geojson) {
+  clearBoundary();
+  if (!geojson) return false;
+  L.geoJSON(geojson, { style: { color: "#0f0f0f", weight: 5, opacity: 0.3, fill: false } }).addTo(boundaryLayer);
+  L.geoJSON(geojson, {
+    style: { color: "#ffffff", weight: 2.4, opacity: 0.95, dashArray: "7,6", fill: false },
+  }).addTo(boundaryLayer);
+  return true;
+}
+
+function drawBoundaryCircle(lat, lng, radius = 750) {
+  clearBoundary();
+  L.circle([lat, lng], { radius, color: "#0f0f0f", weight: 5, opacity: 0.3, fill: false }).addTo(boundaryLayer);
+  L.circle([lat, lng], {
+    radius,
+    color: "#ffffff",
+    weight: 2.4,
+    opacity: 0.95,
+    dashArray: "7,6",
+    fill: false,
+  }).addTo(boundaryLayer);
+}
+
+async function selectSearchResult(item) {
+  searchResults.classList.remove("show");
+  searchInput.value = item.label;
+
+  if (item.geojson) {
+    drawBoundaryFromGeoJSON(item.geojson);
+    if (item.bbox) map.flyToBounds(item.bbox, { duration: 0.8, maxZoom: 16, padding: [40, 40] });
+    else map.flyTo([item.lat, item.lng], 15, { duration: 0.8 });
+    return;
+  }
+
+  // Local neighborhood picks (or point-only OSM results) don't carry a
+  // polygon yet — show an immediate dashed-circle placeholder, then try to
+  // upgrade to a real boundary from OSM in the background.
+  drawBoundaryCircle(item.lat, item.lng);
+  map.flyTo([item.lat, item.lng], 15, { duration: 0.8 });
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&countrycodes=ug&limit=1&q=${encodeURIComponent(item.label + ", Kampala, Uganda")}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data[0] && data[0].geojson && data[0].geojson.type !== "Point") {
+      drawBoundaryFromGeoJSON(data[0].geojson);
+    }
+  } catch (e) {
+    // keep the circle fallback already drawn
+  }
 }
 
 document.addEventListener("click", (e) => {
@@ -653,6 +755,71 @@ document.addEventListener("visibilitychange", () => {
 checkDueListings();
 
 // ---------------------------------------------------------------------------
+// Manage listings (admin panel) — lets you actually see what's been posted
+// and remove entries. Reads/writes the same local DB as everything else;
+// once a shared backend exists this becomes a real moderation view instead
+// of a per-browser one.
+// ---------------------------------------------------------------------------
+const adminBackdrop = document.getElementById("admin-backdrop");
+const adminList = document.getElementById("admin-list");
+const adminSummary = document.getElementById("admin-summary");
+
+document.getElementById("btn-manage").addEventListener("click", openAdminModal);
+document.getElementById("btn-close-admin").addEventListener("click", closeAdminModal);
+adminBackdrop.addEventListener("click", (e) => {
+  if (e.target === adminBackdrop) closeAdminModal();
+});
+
+function openAdminModal() {
+  renderAdminList();
+  adminBackdrop.classList.add("show");
+}
+function closeAdminModal() {
+  adminBackdrop.classList.remove("show");
+}
+
+function renderAdminList() {
+  const listings = DB.all().sort((a, b) => b.createdAt - a.createdAt);
+  adminSummary.textContent =
+    listings.length === 0
+      ? "No listings yet."
+      : `${listings.length} listing${listings.length > 1 ? "s" : ""} stored on this device.`;
+
+  if (listings.length === 0) {
+    adminList.innerHTML = `<div class="admin-empty">Nothing here yet — add a listing, or load the sample set from the demo tools.</div>`;
+    return;
+  }
+
+  adminList.innerHTML = listings
+    .map((l) => {
+      const badges = [];
+      if (l.isSeed) badges.push(`<span class="admin-badge sample">Sample</span>`);
+      if (l.notificationSentAt) badges.push(`<span class="admin-badge pending">Awaiting check-in</span>`);
+      return `
+        <div class="admin-row" data-id="${l.id}">
+          <img class="admin-thumb" src="${l.photos[0] || ""}" alt="" />
+          <div class="admin-info">
+            <p class="title">${escapeHTML(l.neighborhood)} &middot; ${l.bedrooms} bd &middot; ${formatUGX(l.rentUGX)}</p>
+            <p class="sub">${escapeHTML(l.contact)}</p>
+            <div class="admin-badges">${badges.join("")}</div>
+          </div>
+          <button class="admin-remove" data-id="${l.id}">Remove</button>
+        </div>`;
+    })
+    .join("");
+
+  Array.from(adminList.querySelectorAll(".admin-remove")).forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const listing = DB.all().find((l) => l.id === btn.dataset.id);
+      DB.remove(btn.dataset.id);
+      renderMarkers();
+      renderAdminList();
+      if (listing) showToast(`Removed listing in ${listing.neighborhood}`);
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Demo panel wiring (clearly-labeled prototype tooling, not production UI)
 // ---------------------------------------------------------------------------
 document.getElementById("btn-seed").addEventListener("click", seedListings);
@@ -673,6 +840,26 @@ document.getElementById("btn-reset").addEventListener("click", () => {
   DB.clearAll();
   renderMarkers();
   showToast("All data cleared");
+});
+
+// Flyout toggle for the compact demo-tools icon cluster
+const demoToggle = document.getElementById("btn-demo-toggle");
+const demoFlyout = document.getElementById("demo-flyout");
+demoToggle.addEventListener("click", () => {
+  demoFlyout.classList.toggle("show");
+  demoToggle.classList.toggle("active");
+});
+demoFlyout.addEventListener("click", (e) => {
+  if (e.target.closest("button")) {
+    demoFlyout.classList.remove("show");
+    demoToggle.classList.remove("active");
+  }
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".demo-tools") && demoFlyout.classList.contains("show")) {
+    demoFlyout.classList.remove("show");
+    demoToggle.classList.remove("active");
+  }
 });
 
 // ---------------------------------------------------------------------------

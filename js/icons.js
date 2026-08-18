@@ -52,6 +52,42 @@ const ICONS = {
       <circle cx="10.5" cy="10.5" r="6" stroke="white" stroke-width="1.6"/>
       <path d="M15.2 15.2L20 20" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
     </svg>`,
+
+  // "Manage listings" button — clipboard/list glyph
+  list: `
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="5" y="4" width="14" height="17" rx="2" stroke="white" stroke-width="1.5"/>
+      <path d="M9 4V3.5A1.5 1.5 0 0 1 10.5 2h3A1.5 1.5 0 0 1 15 3.5V4" stroke="white" stroke-width="1.5"/>
+      <path d="M8.5 10.5h7M8.5 13.5h7M8.5 16.5h4.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>`,
+
+  // Demo-tools toggle — flask glyph
+  flask: `
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M10 3h4M10 3v5.2c0 .5-.15.98-.44 1.38L6.2 15.1C4.9 16.9 6.2 19.5 8.4 19.5h7.2c2.2 0 3.5-2.6 2.2-4.4l-3.36-5.52A2.4 2.4 0 0 1 14 8.2V3" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M8.3 14.5h7.4" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>`,
+
+  // "Load sample listings" — stacked layers glyph
+  layers: `
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 3l8 4.5-8 4.5-8-4.5L12 3z" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M4 12l8 4.5 8-4.5" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M4 16.2l8 4.5 8-4.5" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+    </svg>`,
+
+  // "Simulate check-in" — bell glyph
+  bell: `
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6 10.5a6 6 0 0 1 12 0c0 3.2 1 4.6 1.6 5.3.3.35.05.9-.4.9H4.8c-.45 0-.7-.55-.4-.9C5 15.1 6 13.7 6 10.5z" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M10 19a2 2 0 0 0 4 0" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>`,
+
+  // "Reset demo data" — trash glyph
+  trash: `
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M5 7h14M9.5 7V5.2c0-.66.54-1.2 1.2-1.2h2.6c.66 0 1.2.54 1.2 1.2V7M7.5 7l.7 12a1.5 1.5 0 0 0 1.5 1.4h4.6a1.5 1.5 0 0 0 1.5-1.4l.7-12" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`,
 };
 
 // Price-to-color gradient: green (cheapest) -> yellow (mid) -> red (priciest)

@@ -24,6 +24,46 @@ If you want a true adaptive-icon version later, that just means generating
 a second, more padded variant for that one manifest entry — the button/pin
 icons and the rest of the app are unaffected either way.
 
+## Base map: Esri satellite, not Google
+
+The base layer is **Esri World Imagery** (free, no API key, no billing
+account) rather than Google satellite tiles. Raw Google tile URLs
+(`mt0.google.com/vt/...`) are commonly hotlinked in tutorials, but doing so
+breaks Google's Terms of Service — it's unlicensed use of tiles meant for
+`maps.google.com` itself, and Google can rate-limit or block it without
+warning. The only ToS-compliant way to get real Google imagery is the
+licensed Maps JavaScript API, which needs a Google Cloud project, an API
+key, and a billing card on file (see the earlier discussion on cost — it
+would likely stay free at this app's usage, but it's a real account either
+way).
+
+Esri's basemap gives the same visual behavior you asked for: satellite
+imagery with no labels by default, and a transparent labels/roads/boundary
+overlay (`Reference/World_Boundaries_and_Places`) that fades in once you
+zoom to street level (zoom 15+, see `STREET_LEVEL_ZOOM` in `js/app.js`) —
+Esri's own equivalent of Google's "Hybrid" mode.
+
+## Neighborhood search boundary
+
+Selecting a search result draws a dashed outline around it, the same way
+Google Maps highlights a searched area — implemented in `js/app.js` around
+`drawBoundaryFromGeoJSON` / `drawBoundaryCircle`. When OpenStreetMap has a
+real boundary polygon for the place (common for well-mapped neighborhoods),
+that exact shape is drawn. When it doesn't — which happens even on Google
+for many smaller localities — it falls back to a dashed circle centered on
+the point, so there's always a visible highlight rather than nothing.
+
+## Manage listings (admin panel)
+
+The list icon in the top-left control stack (below add-listing) opens a
+panel showing every listing currently stored — thumbnail, neighborhood,
+bedrooms, rent, landlord contact, and a "sample"/"awaiting check-in" tag
+where relevant — with a **Remove** button on each. This is reading and
+writing the same local `DB` as the rest of the app, so removing something
+here immediately updates the map too. Once a shared backend exists (see
+"Next step" below), this becomes a real moderation view instead of a
+per-browser one.
+
 ## What's real vs. simulated in this prototype
 
 **Real:**
@@ -90,11 +130,15 @@ stack.
 
 Suggested flow for a live walkthrough:
 
-1. Click **"Load 6 sample listings"** in the bottom-right demo panel — this
-   populates the map so it doesn't look empty, and shows off the price
-   gradient + bedroom-numbered pins immediately.
-2. Pan/zoom the map, then use the search bar to type a neighborhood (e.g.
-   "Najjera") and watch it fly there.
+1. Tap the **flask icon** (bottom-right) to open the demo-tools flyout, then
+   **"Load 6 sample listings"** (stacked-layers icon) — populates the map so
+   it doesn't look empty, and shows off the price gradient + bedroom-numbered
+   pins immediately. The flyout collapses back to one icon afterward, so it
+   doesn't cover the map on small screens.
+2. Pan/zoom the satellite map (it's Esri imagery, labels-free by default),
+   then use the search bar to type a neighborhood (e.g. "Najjera") — the map
+   flies there and draws a dashed boundary outline around it, and zooming
+   in past street level fades in road/place labels automatically.
 3. Tap a marker → shows the scrollable photo gallery popup with the
    neighborhood/contact overlay and the **Get Directions** button (opens
    real Google Maps navigation).
@@ -102,10 +146,15 @@ Suggested flow for a live walkthrough:
    through the real landlord flow: location capture, form fields, photo
    upload (blocks submission under 2 photos), publish.
 5. Allow notifications when prompted.
-6. Click **"Simulate weekly check-in"** in the demo panel → a real OS
-   notification appears asking "Is your listing still available?" with
-   Yes/No actions. Tap one and watch the listing status update live.
-7. **"Reset all data"** clears everything for the next run-through.
+6. Open the demo flyout again → **"Simulate weekly check-in"** (bell icon)
+   → a real OS notification appears asking "Is your listing still
+   available?" with Yes/No actions. Tap one and watch the listing status
+   update live.
+7. Tap the **list icon** (top-left, third button) → **Manage listings**
+   shows every listing currently stored, with a Remove button on each —
+   this is the "see and take down what's been posted" admin view.
+8. **"Reset all data"** (trash icon in the demo flyout) clears everything
+   for the next run-through.
 
 ## Known trade-offs worth stating out loud when presenting
 

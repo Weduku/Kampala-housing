@@ -199,47 +199,107 @@ html, body {
   line-height: 1.4;
 }
 
-/* ---------- Demo / prototype tools panel ---------- */
-.demo-panel {
+/* ---------- Demo / prototype tools — collapsed to one icon on mobile ---------- */
+.demo-tools {
   position: absolute;
   bottom: 22px;
   right: 16px;
   z-index: 500;
-  background: #fff;
-  border: 1.5px dashed #c9c9cf;
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-card);
-  padding: 12px 14px;
-  width: 220px;
-  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
 }
-.demo-panel h4 {
-  margin: 0 0 6px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .03em;
+.demo-flyout {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity .15s ease, transform .15s ease;
+}
+.demo-flyout.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+#btn-demo-toggle.active { background: var(--ink-soft); }
+
+/* ---------- Admin: "Manage listings" panel ---------- */
+.admin-summary {
+  padding: 14px 18px 4px;
+  font-size: 12.5px;
   color: var(--muted);
 }
-.demo-panel p { margin: 0 0 10px; color: var(--muted); line-height: 1.4; }
-.demo-panel button {
-  width: 100%;
-  border: none;
-  background: var(--ink);
-  color: #fff;
-  padding: 9px 10px;
+.admin-list {
+  padding: 10px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.admin-empty {
+  padding: 24px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+.admin-row {
+  display: flex;
+  gap: 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  align-items: center;
+}
+.admin-thumb {
+  width: 56px;
+  height: 56px;
   border-radius: 8px;
+  object-fit: cover;
+  flex: none;
+  background: var(--paper-soft);
+}
+.admin-info { flex: 1; min-width: 0; }
+.admin-info .title {
+  font-size: 13.5px;
+  font-weight: 700;
+  margin: 0 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-info .sub {
   font-size: 12px;
-  font-weight: 600;
+  color: var(--muted);
+  margin: 0;
+}
+.admin-badges { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+.admin-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.admin-badge.sample { background: #eef2ff; color: #4338ca; }
+.admin-badge.pending { background: #fff7ed; color: #c2410c; }
+.admin-remove {
+  flex: none;
+  border: none;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 8px 10px;
+  border-radius: 8px;
   cursor: pointer;
-  margin-bottom: 6px;
   font-family: inherit;
 }
-.demo-panel button.ghost {
-  background: transparent;
-  color: var(--ink);
-  border: 1px solid var(--line);
-}
+.admin-remove:hover { background: #fee2e2; }
 
 /* ---------- Leaflet popup (listing card) ---------- */
 .leaflet-popup-content-wrapper {
