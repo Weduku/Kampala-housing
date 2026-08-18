@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Kampala Housing — Find or list a rental</title>
+<meta name="description" content="Search neighborhoods, find available rentals, and list your property — no login required." />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<meta name="theme-color" content="#0f0f0f" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="app-badge" id="app-badge">Kampala Housing</div>
+
+<!-- Top-left: compass (recenter) then add-location, stacked -->
+<div class="control-stack">
+  <button class="map-btn" id="btn-locate" title="Center on my location" aria-label="Center on my location"></button>
+  <button class="map-btn" id="btn-add" title="Add a listing" aria-label="Add a listing"></button>
+</div>
+
+<!-- Neighborhood search -->
+<div class="search-wrap">
+  <span id="search-icon"></span>
+  <input type="text" id="search-input" placeholder="Search a neighborhood — Najjera, Kyaliwajjala, Naalya…" autocomplete="off" />
+</div>
+<div class="search-results" id="search-results"></div>
+
+<!-- Price legend -->
+<div class="legend" id="legend">
+  <h4>Monthly rent (UGX)</h4>
+  <div class="bar"></div>
+  <div class="labels">
+    <span id="legend-min">—</span>
+    <span id="legend-mid">—</span>
+    <span id="legend-max">—</span>
+  </div>
+  <div class="badge-note">Number on each pin = bedrooms</div>
+</div>
+
+<!-- Demo / prototype tools (clearly labeled — not part of the real product UI) -->
+<div class="demo-panel" id="demo-panel">
+  <h4>Prototype demo tools</h4>
+  <p>Simulates the weekly WhatsApp/Push check-in without waiting a week, for presenting.</p>
+  <button id="btn-seed">Load 6 sample listings</button>
+  <button id="btn-simulate" class="ghost">Simulate weekly check-in</button>
+  <button id="btn-reset" class="ghost">Reset all data</button>
+</div>
+
+<!-- Add listing modal -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>List your property</h3>
+      <button class="map-btn small" id="btn-close-modal" aria-label="Close"></button>
+    </div>
+    <div class="modal-body">
+      <form id="listing-form">
+
+        <div class="field">
+          <label>Property location</label>
+          <div class="geo-status" id="geo-status">
+            <span class="dot"></span>
+            <span id="geo-status-text">Requesting your location…</span>
+            <button type="button" id="btn-retry-geo">Retry</button>
+          </div>
+          <div class="hint">Drag the pin on the map to fine-tune it before submitting.</div>
+        </div>
+
+        <div class="field">
+          <label for="f-bedrooms">Number of bedrooms</label>
+          <input type="number" id="f-bedrooms" min="1" max="20" step="1" placeholder="e.g. 3" required />
+        </div>
+
+        <div class="field">
+          <label for="f-neighborhood">Neighborhood</label>
+          <input type="text" id="f-neighborhood" placeholder="e.g. Najjera" required />
+        </div>
+
+        <div class="field">
+          <label for="f-rent">Monthly rent (UGX)</label>
+          <input type="number" id="f-rent" min="0" step="10000" placeholder="e.g. 850000" required />
+        </div>
+
+        <div class="field">
+          <label for="f-contact">Landlord's contact number</label>
+          <input type="tel" id="f-contact" placeholder="e.g. 077 123 4567" required />
+        </div>
+
+        <div class="field">
+          <label>Photos <span class="hint" style="display:inline">(minimum 2)</span></label>
+          <div class="photo-picker" id="photo-picker">
+            <input type="file" id="f-photos" accept="image/*" multiple />
+            <span id="camera-icon"></span>
+            <div class="label">Tap to add photos</div>
+            <div class="sub">At least 2 required</div>
+          </div>
+          <div class="photo-previews" id="photo-previews"></div>
+          <div class="error-text" id="photo-error">Please add at least 2 photos.</div>
+        </div>
+
+        <button type="submit" class="submit-btn" id="btn-submit">Publish listing</button>
+
+        <div class="push-note">
+          <span>🔔</span>
+          <span>After publishing, we'll ask permission to send weekly check-ins to this device — a quick notification asking if the listing is still available. No response for 2 weeks removes it automatically.</span>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
