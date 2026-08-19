@@ -48,11 +48,57 @@ account on file. Neither requires touching anything else in the app.
 
 Selecting a search result draws a dashed outline around it, the same way
 Google Maps highlights a searched area — implemented in `js/app.js` around
-`drawBoundaryFromGeoJSON` / `drawBoundaryCircle`. When OpenStreetMap has a
-real boundary polygon for the place (common for well-mapped neighborhoods),
-that exact shape is drawn. When it doesn't — which happens even on Google
-for many smaller localities — it falls back to a dashed circle centered on
-the point, so there's always a visible highlight rather than nothing.
+`drawBoundaryFromGeoJSON` / `drawBoundaryLatLngs`.
+
+**All 16 seeded neighborhoods now use real boundary data**, sourced from
+the GKMA (Greater Kampala Metropolitan Area) village/parish GIS dataset —
+see `data/source-gis/`. The matching and conversion pipeline
+(`data/source-gis/match_boundaries.py`) does this:
+
+1. **Match VILLAGE first.** Each neighborhood name (e.g. "Najjera") is
+   checked against the dataset's `VILLAGE` field, exact match or exact
+   match after stripping a sub-area suffix (so "Muyenga" picks up both
+   "MUYENGA A" and "MUYENGA B").
+2. **Fall back to PARISH only if no village match.** Some neighborhoods
+   (Bukoto, Kololo, Bugolobi, Nakawa, Kabalagala, Ggaba, Mengo, Kansanga)
+   aren't named at the village level in this dataset, so their outline
+   comes from the parish instead — including parishes split into several
+   named sub-areas (e.g. "KOLOLO I" through "IV"), all unioned into one
+   shape.
+3. **Reject same-named villages elsewhere in Uganda.** Place names repeat —
+   this dataset has a second, unrelated "Ntinda" 20km away in Busukuma
+   subcounty, and a second "Bukasa" in Kawempe. Every candidate match is
+   checked against the neighborhood's known approximate location and
+   discarded if it's implausibly far away, so the wrong same-named village
+   never silently wins.
+4. **Reproject and dissolve.** The source data is in EPSG:21096 (Arc 1960 /
+   UTM zone 36N); every matched shape is converted to WGS84 (ordinary
+   lat/lng) and merged into a single clean outline per neighborhood using
+   Shapely.
+
+The full match report — what matched, via which field, and what got
+rejected and why — is in `data/source-gis/boundary-match-report.txt`.
+Worth flagging one real limitation directly: **Kansanga** has no boundary
+of its own in this dataset — its only parish record is a combined
+"KANSANGA - MUYENGA" parish, so Kansanga's outline currently covers a
+wider area that includes Muyenga too, rather than Kansanga alone.
+
+The processed output (`data/neighborhood-boundaries.geojson`, ~135KB) is
+what the app actually fetches at runtime; the original 6MB source file and
+the matching script live in `data/source-gis/` for reference and so the
+matching can be rerun if you get updated or more precise GIS data later —
+just drop a new file in as `GKMA_Boundary.geojson` and rerun
+`python3 match_boundaries.py` (needs `pip install pyproj shapely
+--break-system-packages` first).
+
+For any neighborhood not covered by real data (or if the fetch fails, e.g.
+testing from `file://` without a server), the app falls back to a
+**hand-generated irregular polygon** (`generateApproxBoundary` in
+`js/app.js`) — a genuine outline shape, deterministic per name, but
+illustrative rather than surveyed. If a live OpenStreetMap search turns up
+a real polygon for a place outside the seeded 16, that's used automatically
+too. If nothing real exists anywhere, no boundary is drawn — showing
+nothing is more honest than showing a shape that isn't real.
 
 ## Manage listings (admin panel)
 

@@ -1,0 +1,16 @@
+Najjera: matched via VILLAGE -> ['NAJJERA'] (1 feature(s))
+Kyaliwajjala: matched via VILLAGE -> ['KYALIWAJJALA A', 'KYALIWAJJALA B'] (2 feature(s))
+Naalya: matched via VILLAGE -> ['NAALYA'] (1 feature(s))
+Kira: matched via VILLAGE -> ['KIRA'] (1 feature(s))
+Kyanja: matched via VILLAGE -> ['KYANJA'] (1 feature(s))
+Ntinda: matched via PARISH -> ['NTINDA'] (18 feature(s)) [NOTE: excluded same-named-elsewhere: ['NTINDA (BUSUKUMA, 20.6km away)']]
+Bukoto: matched via PARISH -> ['BUKOTO I', 'BUKOTO II'] (25 feature(s))
+Kololo: matched via PARISH -> ['KOLOLO I', 'KOLOLO II', 'KOLOLO III', 'KOLOLO IV'] (18 feature(s))
+Nakawa: matched via PARISH -> ['NAKAWA'] (10 feature(s))
+Bugolobi: matched via PARISH -> ['BUGOLOBI'] (10 feature(s))
+Kansanga: matched via PARISH -> ['KANSANGA - MUYENGA'] (11 feature(s)) [NOTE: shared/combined parish — boundary covers a wider area than just this neighborhood]
+Muyenga: matched via VILLAGE -> ['MUYENGA A', 'MUYENGA B'] (2 feature(s))
+Kabalagala: matched via PARISH -> ['KABALAGALA'] (7 feature(s))
+Ggaba: matched via PARISH -> ['GGABA'] (6 feature(s))
+Mengo: matched via PARISH -> ['MENGO'] (12 feature(s))
+Bukasa: matched via VILLAGE -> ['BUKASA'] (2 feature(s)) [NOTE: excluded same-named-elsewhere: ['BUKASA (KAWEMPE, 10.5km away)', 'BUKASA A (WAKISO, 19.4km away)', 'BUKASA B (WAKISO, 20.8km away)']]

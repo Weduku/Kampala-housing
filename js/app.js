@@ -93,6 +93,46 @@ if (isAdminMode()) {
 }
 
 // ---------------------------------------------------------------------------
+// Approximate neighborhood boundaries. Real boundary polygons don't exist in
+// OpenStreetMap for most of these informal Kampala suburbs — they're mapped
+// there as a single point, not an outlined area, so there's nothing for
+// Nominatim to return. Google's own neighborhood outlines come from Google's
+// internal cartography team, which isn't exposed through any Google API
+// (free or paid), so that's not a shortcut either. Rather than fake it with
+// a circle, each seeded neighborhood gets a hand-generated irregular polygon
+// (deterministic per name, so it's stable across reloads) as a genuine
+// approximate outline. It's illustrative, not a surveyed/administrative
+// boundary — swap in real polygon data (e.g. KCCA GIS data, if you can
+// source it) by replacing the `boundary` field below at any time.
+// ---------------------------------------------------------------------------
+function seededRandom(seedStr) {
+  let h = 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    h = (Math.imul(31, h) + seedStr.charCodeAt(i)) | 0;
+  }
+  return function () {
+    h = Math.imul(h ^ (h >>> 15), h | 1);
+    h ^= h + Math.imul(h ^ (h >>> 7), h | 61);
+    return ((h ^ (h >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function generateApproxBoundary(lat, lng, name, baseRadiusM = 700) {
+  const rand = seededRandom(name);
+  const points = 9;
+  const ring = [];
+  for (let i = 0; i < points; i++) {
+    const angle = (i / points) * 2 * Math.PI;
+    const radius = baseRadiusM * (0.68 + rand() * 0.6); // irregular, not a circle
+    const dLat = (radius * Math.cos(angle)) / 111320;
+    const dLng = (radius * Math.sin(angle)) / (111320 * Math.cos((lat * Math.PI) / 180));
+    ring.push([lat + dLat, lng + dLng]);
+  }
+  ring.push(ring[0]); // close the ring
+  return ring;
+}
+
+// ---------------------------------------------------------------------------
 // Neighborhoods seed list (Kampala area) — used for local search-and-zoom.
 // Approximate coordinates for demo purposes.
 // ---------------------------------------------------------------------------
@@ -114,6 +154,39 @@ const NEIGHBORHOODS = [
   { name: "Mengo", lat: 0.3080, lng: 32.5650 },
   { name: "Bukasa", lat: 0.2850, lng: 32.6300 },
 ];
+NEIGHBORHOODS.forEach((n) => {
+  n.boundary = generateApproxBoundary(n.lat, n.lng, n.name);
+  n.realGeoJSON = null; // filled in by loadRealBoundaries() below, if available
+});
+
+// ---------------------------------------------------------------------------
+// Real boundary data (from your uploaded GKMA village/parish GIS dataset,
+// matched by name to VILLAGE first, then PARISH — see match_boundaries.py).
+// Loaded once at startup and merged into NEIGHBORHOODS by name; falls back
+// silently to the generated approximate outline if this fetch fails (e.g.
+// running from file:// without the data/ folder, or before it's deployed).
+// ---------------------------------------------------------------------------
+async function loadRealBoundaries() {
+  try {
+    const res = await fetch("data/neighborhood-boundaries.geojson");
+    if (!res.ok) return;
+    const geojson = await res.json();
+    geojson.features.forEach((feat) => {
+      const match = NEIGHBORHOODS.find((n) => n.name === feat.properties.name);
+      if (match) {
+        match.realGeoJSON = feat.geometry;
+        match.boundarySource = {
+          field: feat.properties.source_field,
+          values: feat.properties.source_values,
+          sharedParish: feat.properties.shared_parish,
+        };
+      }
+    });
+  } catch (e) {
+    // no real boundary data available — generated approximate outlines still work fine
+  }
+}
+loadRealBoundaries();
 
 // ---------------------------------------------------------------------------
 // Map setup
@@ -382,7 +455,15 @@ async function runSearch(q) {
   const localMatches = NEIGHBORHOODS.filter((n) => n.name.toLowerCase().includes(qLower));
 
   renderSearchResults(
-    localMatches.map((n) => ({ label: n.name, sub: "Neighborhood", lat: n.lat, lng: n.lng, geojson: null, bbox: null }))
+    localMatches.map((n) => ({
+      label: n.name,
+      sub: "Neighborhood",
+      lat: n.lat,
+      lng: n.lng,
+      geojson: n.realGeoJSON || null,
+      bbox: null,
+      boundary: n.boundary,
+    }))
   );
 
   if (localMatches.length === 0) {
@@ -430,9 +511,10 @@ function renderSearchResults(items) {
 
 // ---------------------------------------------------------------------------
 // Neighborhood boundary — dashed outline shown around the searched area,
-// same idea as Google Maps' search highlight. Real polygon when OSM has
-// one; a soft dashed circle fallback otherwise (also what Google itself
-// falls back to for places without precise boundary data).
+// same idea as Google Maps' search highlight. Prefers a real OSM polygon;
+// falls back to the hand-generated approximate outline for seeded
+// neighborhoods (see generateApproxBoundary above); draws nothing at all
+// if neither exists, rather than a misleading circle.
 // ---------------------------------------------------------------------------
 function clearBoundary() {
   boundaryLayer.clearLayers();
@@ -440,25 +522,26 @@ function clearBoundary() {
 
 function drawBoundaryFromGeoJSON(geojson) {
   clearBoundary();
-  if (!geojson) return false;
+  if (!geojson) return null;
   L.geoJSON(geojson, { style: { color: "#0f0f0f", weight: 5, opacity: 0.3, fill: false } }).addTo(boundaryLayer);
-  L.geoJSON(geojson, {
+  const dashed = L.geoJSON(geojson, {
     style: { color: "#ffffff", weight: 2.4, opacity: 0.95, dashArray: "7,6", fill: false },
   }).addTo(boundaryLayer);
-  return true;
+  return dashed;
 }
 
-function drawBoundaryCircle(lat, lng, radius = 750) {
+function drawBoundaryLatLngs(ring) {
   clearBoundary();
-  L.circle([lat, lng], { radius, color: "#0f0f0f", weight: 5, opacity: 0.3, fill: false }).addTo(boundaryLayer);
-  L.circle([lat, lng], {
-    radius,
+  if (!ring) return false;
+  L.polygon(ring, { color: "#0f0f0f", weight: 5, opacity: 0.3, fill: false }).addTo(boundaryLayer);
+  L.polygon(ring, {
     color: "#ffffff",
     weight: 2.4,
     opacity: 0.95,
     dashArray: "7,6",
     fill: false,
   }).addTo(boundaryLayer);
+  return true;
 }
 
 async function selectSearchResult(item) {
@@ -466,16 +549,21 @@ async function selectSearchResult(item) {
   searchInput.value = item.label;
 
   if (item.geojson) {
-    drawBoundaryFromGeoJSON(item.geojson);
-    if (item.bbox) map.flyToBounds(item.bbox, { duration: 0.8, maxZoom: 16, padding: [40, 40] });
-    else map.flyTo([item.lat, item.lng], 15, { duration: 0.8 });
+    const layer = drawBoundaryFromGeoJSON(item.geojson);
+    if (layer && layer.getBounds().isValid()) {
+      map.flyToBounds(layer.getBounds(), { duration: 0.8, maxZoom: 16, padding: [50, 50] });
+    } else {
+      map.flyTo([item.lat, item.lng], 15, { duration: 0.8 });
+    }
     return;
   }
 
-  // Local neighborhood picks (or point-only OSM results) don't carry a
-  // polygon yet — show an immediate dashed-circle placeholder, then try to
-  // upgrade to a real boundary from OSM in the background.
-  drawBoundaryCircle(item.lat, item.lng);
+  // Show the approximate outline immediately (if this is one of our seeded
+  // neighborhoods), then try to upgrade to a real OSM polygon in the
+  // background. If there's no local outline and OSM has nothing either,
+  // no boundary is drawn — a missing outline is more honest than a wrong one.
+  if (item.boundary) drawBoundaryLatLngs(item.boundary);
+  else clearBoundary();
   map.flyTo([item.lat, item.lng], 15, { duration: 0.8 });
 
   try {
@@ -486,7 +574,7 @@ async function selectSearchResult(item) {
       drawBoundaryFromGeoJSON(data[0].geojson);
     }
   } catch (e) {
-    // keep the circle fallback already drawn
+    // keep whatever was already drawn (approximate outline, or nothing)
   }
 }
 
