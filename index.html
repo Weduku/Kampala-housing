@@ -17,10 +17,11 @@
 
 <div class="app-badge" id="app-badge">Kampala Housing</div>
 
-<!-- Top-left: compass (recenter), add-location, manage-listings, stacked -->
+<!-- Top-left: compass (recenter), add-location, route planner, manage-listings, stacked -->
 <div class="control-stack">
   <button class="map-btn" id="btn-locate" title="Center on my location" aria-label="Center on my location"></button>
   <button class="map-btn" id="btn-add" title="Add a listing" aria-label="Add a listing"></button>
+  <button class="map-btn" id="btn-route-planner" title="Plan a multi-stop route" aria-label="Plan a multi-stop route"></button>
   <button class="map-btn admin-only" id="btn-manage" title="Manage listings" aria-label="Manage listings"></button>
 </div>
 
@@ -129,6 +130,32 @@
     <p class="admin-summary" id="admin-summary"></p>
     <div class="admin-list" id="admin-list"></div>
   </div>
+</div>
+
+<!-- Multi-stop route planner modal -->
+<div class="modal-backdrop" id="route-planner-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Plan a multi-stop route</h3>
+      <button class="map-btn small" id="btn-close-route-planner" aria-label="Close"></button>
+    </div>
+    <div class="modal-body">
+      <p class="admin-summary" style="padding:0 0 10px;">Pick 2 or more listings to visit — we'll work out the fastest order.</p>
+      <div class="site-picker-list" id="site-picker-list"></div>
+      <div class="error-text" id="route-planner-error">Select at least 2 listings.</div>
+      <button type="button" class="submit-btn" id="btn-generate-route" style="margin-top:12px;">Generate route</button>
+    </div>
+  </div>
+</div>
+
+<!-- Route info panel — shown once a route (single or multi-stop) is drawn -->
+<div class="route-panel" id="route-panel">
+  <div class="route-panel-top">
+    <p class="route-panel-title" id="route-panel-title">Route</p>
+    <button class="map-btn small" id="btn-clear-route" title="Clear route" aria-label="Clear route"></button>
+  </div>
+  <p class="route-panel-stats" id="route-panel-stats"></p>
+  <ol class="route-panel-stops" id="route-panel-stops"></ol>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

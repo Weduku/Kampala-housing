@@ -44,61 +44,114 @@ Imagery URLs (free, no key, fully ToS-compliant, same visual behavior),
 or go through the official Google Maps JavaScript API with a billing
 account on file. Neither requires touching anything else in the app.
 
-## Neighborhood search boundary
+## Neighborhood search — full dataset, real boundaries
 
-Selecting a search result draws a dashed outline around it, the same way
-Google Maps highlights a searched area — implemented in `js/app.js` around
-`drawBoundaryFromGeoJSON` / `drawBoundaryLatLngs`.
+The search now covers **1,379 real neighborhoods** across Kampala and
+Wakiso, built from the full GKMA village/parish GIS dataset — not a
+hand-picked shortlist. This replaced an earlier 16-neighborhood version
+that was the actual cause of most searches ("Bulindo", "Banda", "Luzira",
+"Kyebando", etc.) turning up nothing; the real GIS data already covered
+almost all of them, they just weren't wired in yet.
 
-**All 16 seeded neighborhoods now use real boundary data**, sourced from
-the GKMA (Greater Kampala Metropolitan Area) village/parish GIS dataset —
-see `data/source-gis/`. The matching and conversion pipeline
-(`data/source-gis/match_boundaries.py`) does this:
+The build pipeline (`data/source-gis/build_neighborhoods.py`) does this:
 
-1. **Match VILLAGE first.** Each neighborhood name (e.g. "Najjera") is
-   checked against the dataset's `VILLAGE` field, exact match or exact
-   match after stripping a sub-area suffix (so "Muyenga" picks up both
-   "MUYENGA A" and "MUYENGA B").
-2. **Fall back to PARISH only if no village match.** Some neighborhoods
-   (Bukoto, Kololo, Bugolobi, Nakawa, Kabalagala, Ggaba, Mengo, Kansanga)
-   aren't named at the village level in this dataset, so their outline
-   comes from the parish instead — including parishes split into several
-   named sub-areas (e.g. "KOLOLO I" through "IV"), all unioned into one
-   shape.
-3. **Reject same-named villages elsewhere in Uganda.** Place names repeat —
-   this dataset has a second, unrelated "Ntinda" 20km away in Busukuma
-   subcounty, and a second "Bukasa" in Kawempe. Every candidate match is
-   checked against the neighborhood's known approximate location and
-   discarded if it's implausibly far away, so the wrong same-named village
-   never silently wins.
-4. **Reproject and dissolve.** The source data is in EPSG:21096 (Arc 1960 /
-   UTM zone 36N); every matched shape is converted to WGS84 (ordinary
-   lat/lng) and merged into a single clean outline per neighborhood using
-   Shapely.
+1. **Match VILLAGE first.** Every village in the dataset becomes a
+   candidate neighborhood, grouped by (base name, subcounty) so sub-areas
+   like "MUYENGA A"/"MUYENGA B" or "KIREKA A"–"D" merge into one "Muyenga"
+   / "Kireka" entry.
+2. **Fall back to PARISH only where no village covers that name in that
+   subcounty.** Places like Bukoto, Kololo, Bugolobi, Nakawa, Kabalagala,
+   Ggaba, Mengo, and Kansanga aren't named at the village level, so their
+   outline is dissolved from the parish instead — including parishes split
+   into several sub-areas (e.g. "KOLOLO I" through "IV"), all merged into
+   one shape. This check is **scoped per subcounty**, not just by name —
+   an earlier version checked names globally and it silently broke: a
+   same-named-but-different village 20km away in Busukuma "claimed" the
+   name "Ntinda" and caused the real Ntinda (Nakawa) to be dropped
+   entirely, because it only exists in this dataset as a parish. Fixed by
+   requiring the village match to be in the *same subcounty* before it's
+   allowed to override a parish.
+3. **Reproject and simplify.** Source data is in EPSG:21096 (Arc 1960 /
+   UTM zone 36N); every shape is converted to WGS84, dissolved with
+   Shapely, and simplified (~6m tolerance) to keep the total boundary
+   payload a reasonable size over mobile data.
 
-The full match report — what matched, via which field, and what got
-rejected and why — is in `data/source-gis/boundary-match-report.txt`.
-Worth flagging one real limitation directly: **Kansanga** has no boundary
-of its own in this dataset — its only parish record is a combined
-"KANSANGA - MUYENGA" parish, so Kansanga's outline currently covers a
-wider area that includes Muyenga too, rather than Kansanga alone.
+Two output files, both in `data/`: `neighborhoods.json` (~148KB — name,
+subcounty/district label, centroid, for instant client-side search) and
+`neighborhood-boundaries.geojson` (~2MB — the actual polygons, fetched once
+and matched by id). The 6MB original source file and the build script live
+in `data/source-gis/` so this can be rerun if you get updated data — drop a
+new file in as `GKMA_Boundary.geojson` and run
+`python3 build_neighborhoods.py` (needs
+`pip install pyproj shapely --break-system-packages`).
 
-The processed output (`data/neighborhood-boundaries.geojson`, ~135KB) is
-what the app actually fetches at runtime; the original 6MB source file and
-the matching script live in `data/source-gis/` for reference and so the
-matching can be rerun if you get updated or more precise GIS data later —
-just drop a new file in as `GKMA_Boundary.geojson` and rerun
-`python3 match_boundaries.py` (needs `pip install pyproj shapely
---break-system-packages` first).
+**Known gaps, stated plainly:**
+- This dataset is **Kampala and Wakiso only**. Mukono and Mpigi aren't in
+  it at all — searches there fall through to a live OpenStreetMap lookup,
+  or the generated approximate outline if OSM has nothing either. If you
+  can source equivalent GIS data for those two districts, the same build
+  script extends to cover them the same way.
+- **"Buwate" isn't in the dataset** under that name (checked directly —
+  no village or parish matches it). It'll fall back to OpenStreetMap/
+  approximate until better data exists.
+- **Kansanga** has no boundary of its own — its only parish record is a
+  combined "KANSANGA - MUYENGA" parish, so its outline currently covers a
+  wider area that includes Muyenga too.
+- **Place names repeat.** This data has two distinct villages both
+  literally called "Ntinda" (20km apart), two called "Kireka", two called
+  "Banda", and more — all real, different places. Rather than guess, the
+  app shows both as separate search results (labeled by subcounty/district)
+  when a query is genuinely ambiguous — see the auto-navigate section below
+  for exactly when that happens.
 
-For any neighborhood not covered by real data (or if the fetch fails, e.g.
-testing from `file://` without a server), the app falls back to a
-**hand-generated irregular polygon** (`generateApproxBoundary` in
-`js/app.js`) — a genuine outline shape, deterministic per name, but
-illustrative rather than surveyed. If a live OpenStreetMap search turns up
-a real polygon for a place outside the seeded 16, that's used automatically
-too. If nothing real exists anywhere, no boundary is drawn — showing
-nothing is more honest than showing a shape that isn't real.
+For anywhere still uncovered (or if the fetch fails, e.g. testing from
+`file://` without a server), the app falls back to a **hand-generated
+irregular polygon** (`generateApproxBoundary` in `js/app.js`) — deliberately
+not a circle, but illustrative rather than surveyed. If nothing real exists
+anywhere, no boundary is drawn at all — showing nothing is more honest than
+showing a shape that isn't real.
+
+## Auto-navigate on search
+
+Typing a neighborhood now jumps straight there once you pause — no need to
+tap a suggestion first. The rule, implemented in `runSearch()` in
+`js/app.js`:
+
+- **Exactly one exact-name match** (or exactly one match at all) → goes
+  there automatically.
+- **More than one place shares that exact name** (a real, recurring thing
+  in this data — see above) → shows a short list instead of guessing,
+  since picking wrong here is worse than one extra tap. This is the fix for
+  a live bug found while building it: typing "Ntinda" was silently flying
+  to the wrong one 20km away before this check existed.
+- Pressing **Enter** always jumps to the top-ranked currently-shown result.
+
+This applies the same way to the OpenStreetMap fallback for places outside
+the 1,379-neighborhood dataset. That fallback also now **only accepts real
+Polygon/MultiPolygon shapes** — it previously accepted anything except a
+bare Point, which is what let Kireka render as a stray line: OpenStreetMap
+had an open, unclosed LineString for it, not an actual outline. That specific
+case is now moot anyway since Kireka has 4 real merged sub-village polygons
+in the GKMA dataset, but the type check stays as a general safeguard for
+any future place that only resolves through OpenStreetMap.
+
+## Multi-stop route planner
+
+The route icon in the top-left stack (between add-listing and manage
+listings) opens a picker of every active listing — select two or more and
+it generates one optimized driving route visiting all of them, using
+OSRM's free "Trip" service (`js/app.js`, `generateMultiRoute()`) — a
+different endpoint from normal point-to-point directions; this one solves
+*what order* to visit stops in, not just how to get from A to B. No API key,
+same free OSRM public server already used for nothing else in this app
+(single-property "Get Directions" still uses a plain Google Maps deep link,
+unchanged).
+
+The route draws on the map, and a panel (bottom-left) shows total distance,
+estimated driving time, and the optimized stop order. **Clear route**
+(trash icon in that panel) removes it. This is public, not admin-gated —
+unlike the demo tools and Manage Listings, route planning is a real feature
+for anyone browsing listings, not a testing/admin tool.
 
 ## Manage listings (admin panel)
 
@@ -211,26 +264,33 @@ Suggested flow for a live walkthrough:
    **"Load 6 sample listings"** (stacked-layers icon) — populates the map so
    it doesn't look empty, and shows off the price gradient + bedroom-numbered
    pins immediately. The flyout collapses back to one icon afterward, so it
-   doesn't cover the map on small screens.
-2. Pan/zoom the satellite map (Google tiles, labels-free by default),
-   then use the search bar to type a neighborhood (e.g. "Najjera") — the map
-   flies there and draws a dashed boundary outline around it, and zooming
-   in past street level fades in road/place labels automatically.
+   doesn't cover the map on small screens. This button is admin-only — see
+   "Admin-only controls" above for how to see it at all.
+2. Pan/zoom the satellite map (Google tiles, labels-free by default), then
+   type a neighborhood into the search bar — try a common one like "Najjera"
+   (goes straight there, one match), then try **"Ntinda"** to show the
+   disambiguation case (two real places share that name) versus a unique
+   one like "Bulindo" (goes straight there automatically, no click needed).
 3. Tap a marker → shows the scrollable photo gallery popup with the
    neighborhood/contact overlay and the **Get Directions** button (opens
-   real Google Maps navigation).
-4. Tap the **add-location button** (top-left, under the compass) → walks
+   real Google Maps navigation for that one property).
+4. Tap the **route icon** (top-left, third button) → **Plan a multi-stop
+   route** → pick 2+ listings → generates one optimized driving route
+   visiting all of them, with total distance/time and visiting order shown
+   in the bottom-left panel.
+5. Tap the **add-location button** (top-left, second button) → walks
    through the real landlord flow: location capture, form fields, photo
    upload (blocks submission under 2 photos), publish.
-5. Allow notifications when prompted.
-6. Open the demo flyout again → **"Simulate weekly check-in"** (bell icon)
+6. Allow notifications when prompted.
+7. Open the demo flyout again → **"Simulate weekly check-in"** (bell icon)
    → a real OS notification appears asking "Is your listing still
    available?" with Yes/No actions. Tap one and watch the listing status
    update live.
-7. Tap the **list icon** (top-left, third button) → **Manage listings**
+8. Tap the **list icon** (top-left, last button) → **Manage listings**
    shows every listing currently stored, with a Remove button on each —
-   this is the "see and take down what's been posted" admin view.
-8. **"Reset all data"** (trash icon in the demo flyout) clears everything
+   this is the "see and take down what's been posted" admin view. Also
+   admin-only.
+9. **"Reset all data"** (trash icon in the demo flyout) clears everything
    for the next run-through.
 
 ## Known trade-offs worth stating out loud when presenting

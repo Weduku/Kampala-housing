@@ -93,17 +93,12 @@ if (isAdminMode()) {
 }
 
 // ---------------------------------------------------------------------------
-// Approximate neighborhood boundaries. Real boundary polygons don't exist in
-// OpenStreetMap for most of these informal Kampala suburbs — they're mapped
-// there as a single point, not an outlined area, so there's nothing for
-// Nominatim to return. Google's own neighborhood outlines come from Google's
-// internal cartography team, which isn't exposed through any Google API
-// (free or paid), so that's not a shortcut either. Rather than fake it with
-// a circle, each seeded neighborhood gets a hand-generated irregular polygon
-// (deterministic per name, so it's stable across reloads) as a genuine
-// approximate outline. It's illustrative, not a surveyed/administrative
-// boundary — swap in real polygon data (e.g. KCCA GIS data, if you can
-// source it) by replacing the `boundary` field below at any time.
+// Fallback approximate outline generator — only used now if a searched
+// place has no real polygon anywhere (neither the GKMA dataset nor a live
+// OpenStreetMap lookup), e.g. most Mukono/Mpigi searches, since the
+// uploaded GIS dataset only covers Kampala and Wakiso districts. Deliberately
+// NOT a circle (see prior discussion) — a deterministic irregular polygon
+// instead, stable across reloads but clearly illustrative, not surveyed.
 // ---------------------------------------------------------------------------
 function seededRandom(seedStr) {
   let h = 0;
@@ -133,60 +128,51 @@ function generateApproxBoundary(lat, lng, name, baseRadiusM = 700) {
 }
 
 // ---------------------------------------------------------------------------
-// Neighborhoods seed list (Kampala area) — used for local search-and-zoom.
-// Approximate coordinates for demo purposes.
+// Neighborhood database — loaded from the full GKMA village/parish dataset
+// (data/neighborhoods.json, ~1,367 entries covering Kampala + Wakiso;
+// data/neighborhood-boundaries.geojson has the matching real polygons,
+// linked by id). This replaces the old hand-picked list of 16 — that list
+// was the actual cause of most searches turning up nothing; the real GIS
+// data already covered almost everything, it just wasn't wired in.
+//
+// Mukono and Mpigi districts are NOT in the uploaded dataset — searches
+// there fall through to a live OpenStreetMap lookup, or the generated
+// approximate outline above if OSM has nothing either.
 // ---------------------------------------------------------------------------
-const NEIGHBORHOODS = [
-  { name: "Najjera", lat: 0.3841, lng: 32.6349 },
-  { name: "Kyaliwajjala", lat: 0.3937, lng: 32.6467 },
-  { name: "Naalya", lat: 0.3765, lng: 32.6285 },
-  { name: "Kira", lat: 0.3980, lng: 32.6350 },
-  { name: "Kyanja", lat: 0.3850, lng: 32.6050 },
-  { name: "Ntinda", lat: 0.3630, lng: 32.6050 },
-  { name: "Bukoto", lat: 0.3450, lng: 32.6050 },
-  { name: "Kololo", lat: 0.3350, lng: 32.5900 },
-  { name: "Nakawa", lat: 0.3330, lng: 32.6150 },
-  { name: "Bugolobi", lat: 0.3200, lng: 32.6200 },
-  { name: "Kansanga", lat: 0.2950, lng: 32.6050 },
-  { name: "Muyenga", lat: 0.2980, lng: 32.5950 },
-  { name: "Kabalagala", lat: 0.2990, lng: 32.5990 },
-  { name: "Ggaba", lat: 0.2700, lng: 32.6150 },
-  { name: "Mengo", lat: 0.3080, lng: 32.5650 },
-  { name: "Bukasa", lat: 0.2850, lng: 32.6300 },
-];
-NEIGHBORHOODS.forEach((n) => {
-  n.boundary = generateApproxBoundary(n.lat, n.lng, n.name);
-  n.realGeoJSON = null; // filled in by loadRealBoundaries() below, if available
-});
+let NEIGHBORHOODS = [];
+let neighborhoodsReady = false;
 
-// ---------------------------------------------------------------------------
-// Real boundary data (from your uploaded GKMA village/parish GIS dataset,
-// matched by name to VILLAGE first, then PARISH — see match_boundaries.py).
-// Loaded once at startup and merged into NEIGHBORHOODS by name; falls back
-// silently to the generated approximate outline if this fetch fails (e.g.
-// running from file:// without the data/ folder, or before it's deployed).
-// ---------------------------------------------------------------------------
-async function loadRealBoundaries() {
+async function loadNeighborhoods() {
   try {
-    const res = await fetch("data/neighborhood-boundaries.geojson");
-    if (!res.ok) return;
-    const geojson = await res.json();
-    geojson.features.forEach((feat) => {
-      const match = NEIGHBORHOODS.find((n) => n.name === feat.properties.name);
-      if (match) {
-        match.realGeoJSON = feat.geometry;
-        match.boundarySource = {
-          field: feat.properties.source_field,
-          values: feat.properties.source_values,
-          sharedParish: feat.properties.shared_parish,
-        };
-      }
+    const [idxRes, boundaryRes] = await Promise.all([
+      fetch("data/neighborhoods.json"),
+      fetch("data/neighborhood-boundaries.geojson"),
+    ]);
+    const idx = idxRes.ok ? await idxRes.json() : [];
+    const boundaryData = boundaryRes.ok ? await boundaryRes.json() : { features: [] };
+
+    const boundaryById = {};
+    boundaryData.features.forEach((f) => {
+      boundaryById[f.properties.id] = f.geometry;
+    });
+
+    NEIGHBORHOODS = idx.map((n) => ({
+      ...n,
+      realGeoJSON: boundaryById[n.id] || null,
+      boundary: null, // computed lazily below only if no real geometry exists
+    }));
+    NEIGHBORHOODS.forEach((n) => {
+      if (!n.realGeoJSON) n.boundary = generateApproxBoundary(n.lat, n.lng, n.name);
     });
   } catch (e) {
-    // no real boundary data available — generated approximate outlines still work fine
+    // Data files unavailable (e.g. running from file:// or not deployed yet)
+    // — search still works via live OpenStreetMap lookup, just without the
+    // local instant results.
+    NEIGHBORHOODS = [];
   }
+  neighborhoodsReady = true;
 }
-loadRealBoundaries();
+const neighborhoodsLoadPromise = loadNeighborhoods();
 
 // ---------------------------------------------------------------------------
 // Map setup
@@ -198,6 +184,7 @@ L.control.zoom({ position: "bottomright" }).addTo(map);
 // Kampala Wall Art project. Note this is the same trade-off flagged before:
 // it's not the official, key-based Maps JavaScript API, so it's unlicensed
 // use of tiles meant for maps.google.com — it can be rate-limited or
+
 // blocked by Google without notice. Using it here since you've already
 // run it live on another project and are making that call knowingly; if it
 // ever gets throttled, the Esri World Imagery version from before is a
@@ -235,6 +222,8 @@ let tempPinMarker = null; // draggable pin shown while the add-listing modal is 
 document.getElementById("btn-locate").innerHTML = ICONS.compass;
 document.getElementById("btn-add").innerHTML = ICONS.addLocation;
 document.getElementById("btn-manage").innerHTML = ICONS.list;
+document.getElementById("btn-route-planner").innerHTML = ICONS.route;
+document.getElementById("btn-clear-route").innerHTML = ICONS.trash;
 document.getElementById("btn-close-modal").innerHTML = ICONS.close;
 document.getElementById("btn-close-admin").innerHTML = ICONS.close;
 document.getElementById("search-icon").innerHTML = ICONS.search;
@@ -450,47 +439,114 @@ searchInput.addEventListener("input", () => {
   searchDebounce = setTimeout(() => runSearch(q), 250);
 });
 
+function rankLocalMatches(qLower) {
+  return NEIGHBORHOODS.filter((n) => n.name.toLowerCase().includes(qLower)).sort((a, b) => {
+    const an = a.name.toLowerCase();
+    const bn = b.name.toLowerCase();
+    const aStarts = an.startsWith(qLower) ? 0 : 1;
+    const bStarts = bn.startsWith(qLower) ? 0 : 1;
+    if (aStarts !== bStarts) return aStarts - bStarts;
+    return an.length - bn.length; // more specific/shorter names first
+  });
+}
+
+function toSearchItem(n) {
+  return {
+    label: n.name,
+    sub: n.sub || "Neighborhood",
+    lat: n.lat,
+    lng: n.lng,
+    geojson: n.realGeoJSON || null,
+    bbox: null,
+    boundary: n.boundary,
+  };
+}
+
+let lastRankedResults = [];
+
 async function runSearch(q) {
-  const qLower = q.toLowerCase();
-  const localMatches = NEIGHBORHOODS.filter((n) => n.name.toLowerCase().includes(qLower));
+  await neighborhoodsLoadPromise;
+  const qLower = q.toLowerCase().trim();
+  if (!qLower) {
+    renderSearchResults([]);
+    return;
+  }
 
-  renderSearchResults(
-    localMatches.map((n) => ({
-      label: n.name,
-      sub: "Neighborhood",
-      lat: n.lat,
-      lng: n.lng,
-      geojson: n.realGeoJSON || null,
-      bbox: null,
-      boundary: n.boundary,
-    }))
-  );
+  const ranked = rankLocalMatches(qLower);
+  lastRankedResults = ranked;
 
-  if (localMatches.length === 0) {
+  // Auto-navigate on a confident match — but "confident" means genuinely
+  // unambiguous. Several real places in this dataset share an exact name
+  // across different subcounties (e.g. two villages both literally called
+  // "Ntinda", 20km apart) — silently picking whichever sorts first was
+  // exactly the bug that sent an earlier version of this to the wrong one.
+  // So: auto-navigate only when there's exactly one exact-name match, or
+  // exactly one candidate at all. Multiple same-name hits still show the
+  // list, disambiguated by their subcounty/district label.
+  const exactMatches = ranked.filter((n) => n.name.toLowerCase() === qLower);
+  if (exactMatches.length === 1) {
+    renderSearchResults([]);
+    await selectSearchResult(toSearchItem(exactMatches[0]));
+    return;
+  }
+  if (exactMatches.length === 0 && ranked.length === 1) {
+    renderSearchResults([]);
+    await selectSearchResult(toSearchItem(ranked[0]));
+    return;
+  }
+
+  const top = ranked.slice(0, 8);
+  renderSearchResults(top.map(toSearchItem));
+
+  if (ranked.length === 0) {
     try {
       const url = `https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&countrycodes=ug&limit=5&q=${encodeURIComponent(q)}`;
       const res = await fetch(url);
       const data = await res.json();
-      renderSearchResults(
-        data.map((d) => ({
-          label: d.display_name.split(",")[0],
-          sub: d.display_name,
-          lat: parseFloat(d.lat),
-          lng: parseFloat(d.lon),
-          geojson: d.geojson && d.geojson.type !== "Point" ? d.geojson : null,
-          bbox: d.boundingbox
-            ? [
-                [parseFloat(d.boundingbox[0]), parseFloat(d.boundingbox[2])],
-                [parseFloat(d.boundingbox[1]), parseFloat(d.boundingbox[3])],
-              ]
-            : null,
-        }))
-      );
+      // Only Polygon/MultiPolygon count as a real boundary — Nominatim can
+      // return LineString for open/unclosed ways, which rendered as a
+      // stray line rather than an outline (the Kireka bug).
+      const items = data.map((d) => ({
+        label: d.display_name.split(",")[0],
+        sub: d.display_name,
+        lat: parseFloat(d.lat),
+        lng: parseFloat(d.lon),
+        geojson: d.geojson && (d.geojson.type === "Polygon" || d.geojson.type === "MultiPolygon") ? d.geojson : null,
+        bbox: d.boundingbox
+          ? [
+              [parseFloat(d.boundingbox[0]), parseFloat(d.boundingbox[2])],
+              [parseFloat(d.boundingbox[1]), parseFloat(d.boundingbox[3])],
+            ]
+          : null,
+      }));
+      lastRankedResults = [];
+      if (items.length === 1) {
+        renderSearchResults([]);
+        await selectSearchResult(items[0]);
+        return;
+      }
+      renderSearchResults(items);
+      // Stash for Enter-to-go
+      searchResults.dataset.osmMode = "1";
+      window.__lastOsmItems = items;
     } catch (e) {
       // silent fail — local results (if any) still stand
     }
+  } else {
+    searchResults.dataset.osmMode = "";
   }
 }
+
+searchInput.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const osmMode = searchResults.dataset.osmMode === "1";
+  if (osmMode && window.__lastOsmItems && window.__lastOsmItems[0]) {
+    selectSearchResult(window.__lastOsmItems[0]);
+  } else if (!osmMode && lastRankedResults[0]) {
+    selectSearchResult(toSearchItem(lastRankedResults[0]));
+  }
+});
 
 function renderSearchResults(items) {
   if (items.length === 0) {
@@ -931,6 +987,140 @@ function renderAdminList() {
       if (listing) showToast(`Removed listing in ${listing.neighborhood}`);
     });
   });
+}
+
+// ---------------------------------------------------------------------------
+// Multi-stop route planner — pick several listings, get one optimized
+// driving route visiting all of them, using OSRM's free "Trip" service
+// (a different endpoint from normal routing: this one solves *what order*
+// to visit stops in, not just point-to-point directions). Free, no API key.
+// ---------------------------------------------------------------------------
+let routeLayer = null;
+let routeUserMarker = null;
+
+const routePlannerBackdrop = document.getElementById("route-planner-backdrop");
+const sitePickerList = document.getElementById("site-picker-list");
+const routePlannerError = document.getElementById("route-planner-error");
+const routePanel = document.getElementById("route-panel");
+
+document.getElementById("btn-route-planner").addEventListener("click", openRoutePlannerModal);
+document.getElementById("btn-close-route-planner").addEventListener("click", closeRoutePlannerModal);
+routePlannerBackdrop.addEventListener("click", (e) => {
+  if (e.target === routePlannerBackdrop) closeRoutePlannerModal();
+});
+document.getElementById("btn-clear-route").addEventListener("click", clearRoute);
+document.getElementById("btn-generate-route").addEventListener("click", generateMultiRoute);
+
+function openRoutePlannerModal() {
+  const listings = DB.all().filter((l) => l.active);
+  if (listings.length === 0) {
+    showToast("No listings to route to yet");
+    return;
+  }
+  sitePickerList.innerHTML = listings
+    .map(
+      (l) => `
+      <div class="site-picker-item">
+        <input type="checkbox" id="pick-${l.id}" value="${l.id}" class="route-planner-checkbox" />
+        <label for="pick-${l.id}">${escapeHTML(l.neighborhood)} — ${l.bedrooms}bd, ${formatUGX(l.rentUGX)}
+          <span class="muted">${escapeHTML(l.contact)}</span>
+        </label>
+      </div>`
+    )
+    .join("");
+  routePlannerError.classList.remove("show");
+  routePlannerBackdrop.classList.add("show");
+}
+
+function closeRoutePlannerModal() {
+  routePlannerBackdrop.classList.remove("show");
+}
+
+async function generateMultiRoute() {
+  const checkedIds = Array.from(document.querySelectorAll(".route-planner-checkbox:checked")).map((cb) => cb.value);
+  if (checkedIds.length < 2) {
+    routePlannerError.classList.add("show");
+    return;
+  }
+  if (!navigator.geolocation) {
+    showToast("Your device doesn't support location — can't plan a route from here");
+    return;
+  }
+
+  const selectedListings = checkedIds.map((id) => DB.all().find((l) => l.id === id)).filter(Boolean);
+  closeRoutePlannerModal();
+  map.closePopup();
+
+  showToast("Finding your location…");
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const userLat = pos.coords.latitude;
+      const userLng = pos.coords.longitude;
+
+      if (routeUserMarker) map.removeLayer(routeUserMarker);
+      routeUserMarker = L.circleMarker([userLat, userLng], {
+        radius: 7,
+        color: "#fff",
+        weight: 2,
+        fillColor: "#1d4ed8",
+        fillOpacity: 1,
+      })
+        .addTo(map)
+        .bindPopup("You are here");
+
+      const coordsStr = [`${userLng},${userLat}`, ...selectedListings.map((l) => `${l.lng},${l.lat}`)].join(";");
+      const url = `https://router.project-osrm.org/trip/v1/driving/${coordsStr}?source=first&roundtrip=false&overview=full&geometries=geojson`;
+
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!data.trips || !data.trips.length) {
+          showToast("Could not generate a route for those listings");
+          return;
+        }
+        const trip = data.trips[0];
+        const coords = trip.geometry.coordinates.map((c) => [c[1], c[0]]);
+
+        if (routeLayer) map.removeLayer(routeLayer);
+        routeLayer = L.polyline(coords, { color: "#1d4ed8", weight: 5, opacity: 0.9 }).addTo(map);
+        map.fitBounds(routeLayer.getBounds(), { padding: [60, 60] });
+
+        // waypoints[0] is the user's start; the rest correspond to
+        // selectedListings in their original order, each carrying its
+        // position in the OPTIMIZED visiting sequence via waypoint_index
+        const stopOrder = data.waypoints
+          .slice(1)
+          .map((wp, i) => ({ listing: selectedListings[i], order: wp.waypoint_index }))
+          .sort((a, b) => a.order - b.order);
+
+        const km = (trip.distance / 1000).toFixed(1);
+        const mins = Math.round(trip.duration / 60);
+
+        document.getElementById("route-panel-title").textContent = `${selectedListings.length}-stop route`;
+        document.getElementById("route-panel-stats").textContent = `${km} km · ~${mins} min driving`;
+        document.getElementById("route-panel-stops").innerHTML = stopOrder
+          .map((s) => `<li>${escapeHTML(s.listing.neighborhood)} — ${s.listing.bedrooms}bd, ${formatUGX(s.listing.rentUGX)}</li>`)
+          .join("");
+        routePanel.classList.add("show");
+      } catch (err) {
+        showToast("Could not generate a route right now — try again");
+      }
+    },
+    () => showToast("Could not get your location — check location permissions"),
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
+function clearRoute() {
+  if (routeLayer) {
+    map.removeLayer(routeLayer);
+    routeLayer = null;
+  }
+  if (routeUserMarker) {
+    map.removeLayer(routeUserMarker);
+    routeUserMarker = null;
+  }
+  routePanel.classList.remove("show");
 }
 
 // ---------------------------------------------------------------------------

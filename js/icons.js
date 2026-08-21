@@ -39,6 +39,14 @@ const ICONS = {
       <path d="M6 6l12 12M18 6L6 18" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
     </svg>`,
 
+  route: `
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="5" cy="6" r="2.2" fill="white"/>
+      <circle cx="19" cy="18" r="2.2" fill="white"/>
+      <circle cx="14" cy="9" r="1.6" fill="white"/>
+      <path d="M6.6 7.6 12.6 8.4M15.4 10 17.6 16" stroke="white" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="2.5 2.8"/>
+    </svg>`,
+
   // Camera glyph for the photo upload control
   camera: `
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

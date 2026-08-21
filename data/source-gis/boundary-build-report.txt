@@ -1,0 +1,3 @@
+Village-based entries: 1258
+Parish-only entries: 121
+Total neighborhoods: 1379
